@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>AI Console</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0d1117;
+        --panel: #161b22;
+        --line: #30363d;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #4f8cff;
+        --ok: #3fb950;
+        --warn: #d29922;
+        --err: #f85149;
+        --radius: 10px;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f6f8fa; --panel: #ffffff; --line: #d0d7de;
+          --text: #1f2328; --muted: #656d76; --accent: #0969da;
+          --ok: #1a7f37; --warn: #9a6700; --err: #cf222e;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--text);
+        font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      header {
+        display: flex; align-items: center; gap: 12px;
+        padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+        position: sticky; top: 0; z-index: 5;
+      }
+      header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+      header .spacer { flex: 1; }
+      .badge {
+        font-size: 12px; padding: 3px 8px; border-radius: 999px;
+        border: 1px solid var(--line); color: var(--muted);
+      }
+      .badge.ok { color: var(--ok); border-color: var(--ok); }
+      .badge.err { color: var(--err); border-color: var(--err); }
+      main { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+      @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+      .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+      #log { height: calc(100vh - 300px); min-height: 320px; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      .msg { max-width: 88%; padding: 10px 14px; border-radius: var(--radius); white-space: pre-wrap; word-wrap: break-word; }
+      .msg.user { align-self: flex-end; background: var(--accent); color: #fff; }
+      .msg.bot { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+      .msg.error { align-self: flex-start; border: 1px solid var(--err); color: var(--err); background: transparent; }
+      .msg .meta { display: block; font-size: 11px; color: var(--muted); margin-top: 6px; }
+      .composer { border-top: 1px solid var(--line); padding: 12px; display: grid; gap: 8px; }
+      textarea {
+        width: 100%; min-height: 76px; max-height: 240px; resize: vertical; padding: 10px 12px;
+        border-radius: var(--radius); border: 1px solid var(--line); background: var(--bg); color: var(--text);
+        font: inherit;
+      }
+      .row { display: flex; gap: 8px; align-items: center; }
+      button {
+        font: inherit; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+        border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      input[type="password"], input[type="text"] {
+        width: 100%; padding: 8px 10px; border-radius: 8px;
+        border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit;
+      }
+      .side-section { padding: 14px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+      .side-section:last-child { border-bottom: 0; }
+      .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+      .kv span:first-child { color: var(--muted); }
+      .kv span:last-child { text-align: right; word-break: break-all; }
+      .hint { font-size: 12px; color: var(--muted); }
+      .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+      .dot.ok { background: var(--ok); }
+      .dot.err { background: var(--err); }
+      .dot.warn { background: var(--warn); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>AI Console</h1>
+      <span class="badge" id="modelBadge">модель…</span>
+      <span class="spacer"></span>
+      <span class="badge" id="connBadge">не подключено</span>
+    </header>
+
+    <main>
+      <section class="panel">
+        <h2>Чат</h2>
+        <div id="log" aria-live="polite"></div>
+        <div class="composer">
+          <textarea id="input" placeholder="Напиши сообщение… (Enter — отправить, Shift+Enter — новая строка)"></textarea>
+          <div class="row">
+            <button class="primary" id="send">Отправить</button>
+            <button id="reset">Новый диалог</button>
+            <span class="hint" id="usage"></span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <h2>Доступ</h2>
+        <div class="side-section">
+          <label class="hint" for="token">ADMIN_TOKEN (хранится только в этом браузере)</label>
+          <input type="password" id="token" placeholder="вставь ADMIN_TOKEN" autocomplete="off" />
+          <button id="connect">Подключиться</button>
+          <span class="hint" id="authHint"></span>
+        </div>
+
+        <h2>Статус</h2>
+        <div class="side-section" id="status">
+          <span class="hint">Подключись, чтобы увидеть данные.</span>
+        </div>
+
+        <h2>Промпт</h2>
+        <div class="side-section">
+          <label class="hint" for="systemPrompt">Системный промпт для этого браузера</label>
+          <textarea id="systemPrompt" style="min-height:64px" placeholder="оставь пустым — будет стандартный"></textarea>
+        </div>
+      </aside>
+    </main>
+
+    <script>
+      // The page is deliberately dependency-free: one fetch per turn, no build
+      // step, so a Vercel deploy of the api/ functions is the whole delivery.
+      const TOKEN_KEY = 'ai-console-token'
+      const SESSION_KEY = 'ai-console-session'
+
+      const el = {
+        log: document.getElementById('log'),
+        input: document.getElementById('input'),
+        send: document.getElementById('send'),
+        reset: document.getElementById('reset'),
+        token: document.getElementById('token'),
+        connect: document.getElementById('connect'),
+        authHint: document.getElementById('authHint'),
+        status: document.getElementById('status'),
+        connBadge: document.getElementById('connBadge'),
+        modelBadge: document.getElementById('modelBadge'),
+        usage: document.getElementById('usage'),
+        systemPrompt: document.getElementById('systemPrompt'),
+      }
+
+      let sessionId = localStorage.getItem(SESSION_KEY) || newServiceSession()
+      let busy = false
+      let sentThisSession = 0
+
+      function newServiceSession() {
+        const id = crypto.randomUUID()
+        localStorage.setItem(SESSION_KEY, id)
+        return id
+      }
+
+      function token() {
+        return el.token.value.trim()
+      }
+
+      function setConnected(ok, text) {
+        el.connBadge.textContent = text
+        el.connBadge.className = 'badge ' + (ok ? 'ok' : 'err')
+      }
+
+      function bubble(kind, text, meta) {
+        const node = document.createElement('div')
+        node.className = 'msg ' + kind
+        node.textContent = text
+        if (meta) {
+          const m = document.createElement('span')
+          m.className = 'meta'
+          m.textContent = meta
+          node.appendChild(m)
+        }
+        el.log.appendChild(node)
+        el.log.scrollTop = el.log.scrollHeight
+        return node
+      }
+
+      async function api(path, options) {
+        const response = await fetch(path, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-token': token(),
+            ...(options && options.headers ? options.headers : {}),
+          },
+        })
+        let data = null
+        try { data = await response.json() } catch { /* non-JSON */ }
+        return { status: response.status, data }
+      }
+
+      async function refreshStatus() {
+        if (!token()) return
+        const { status, data } = await api('/api/status', { method: 'GET' })
+        if (status === 401 || status === 403 || !data || data.ok !== true) {
+          setConnected(false, status === 401 || status === 403 ? 'токен неверный' : 'нет связи')
+          el.authHint.textContent = status === 401 || status === 403 ? 'ADMIN_TOKEN не совпал' : 'ошибка запроса'
+          return
+        }
+        setConnected(true, 'подключено')
+        el.authHint.textContent = ''
+        localStorage.setItem(TOKEN_KEY, token())
+        renderStatus(data.status)
+      }
+
+      function renderStatus(s) {
+        el.modelBadge.textContent = s.model
+        const c = s.configuration
+        const rows = [
+          ['Модель', s.model],
+          ['Регион', s.region],
+          ['Node', s.node],
+          ['Живёт', Math.floor(s.uptimeSeconds / 60) + ' мин'],
+          ['Запросов к модели', String(s.counters.chats)],
+          ['Ошибок', String(s.counters.failures)],
+          ['Упёрлись в лимит', String(s.counters.quotaHits)],
+          ['Ответов в Telegram', String(s.counters.telegramReplies)],
+        ]
+        const flags = [
+          ['Routeway ключ', c.routewayKey],
+          ['Telegram токен', c.telegramToken],
+          ['Webhook секрет', c.webhookSecret],
+          ['Admin токен', c.adminToken],
+        ]
+        el.status.innerHTML = ''
+        for (const [k, v] of rows) {
+          el.status.appendChild(kv(k, v))
+        }
+        for (const [k, ok] of flags) {
+          el.status.appendChild(kv(k, '', ok))
+        }
+        const w = s.webhook || {}
+        if (w.configured && w.url) {
+          el.status.appendChild(kv('Webhook', w.url.length > 44 ? w.url.slice(0, 44) + '…' : w.url, true))
+          if (w.pending) el.status.appendChild(kv('В очереди', String(w.pending)))
+          if (w.lastError) el.status.appendChild(kv('Ошибка TG', w.lastError.slice(0, 60)))
+        } else if (w.configured === false) {
+          el.status.appendChild(kv('Webhook', 'не настроен', false))
+        } else if (w.error) {
+          el.status.appendChild(kv('Webhook', w.error.slice(0, 40), false))
+        }
+      }
+
+      function kv(label, value, flag) {
+        const row = document.createElement('div')
+        row.className = 'kv'
+        const a = document.createElement('span')
+        a.textContent = label
+        const b = document.createElement('span')
+        if (typeof flag === 'boolean') {
+          const dot = document.createElement('span')
+          dot.className = 'dot ' + (flag ? 'ok' : 'err')
+          b.appendChild(dot)
+          b.appendChild(document.createTextNode(flag ? 'задан' : 'нет'))
+        } else {
+          b.textContent = value
+        }
+        row.appendChild(a)
+        row.appendChild(b)
+        return row
+      }
+
+      async function send() {
+        const text = el.input.value.trim()
+        if (text.length === 0 || busy) return
+        if (!token()) {
+          setConnected(false, 'нужен токен')
+          el.authHint.textContent = 'Вставь ADMIN_TOKEN в поле выше'
+          return
+        }
+        busy = true
+        el.send.disabled = true
+        el.input.value = ''
+        bubble('user', text)
+        const pending = bubble('bot', '…')
+        const started = performance.now()
+        try {
+          const { status, data } = await api('/api/chat', {
+            method: 'POST',
+            body: JSON.stringify({
+              sessionId,
+              message: text,
+              systemPrompt: el.systemPrompt.value.trim() || undefined,
+            }),
+          })
+          const seconds = ((performance.now() - started) / 1000).toFixed(1) + ' с'
+          pending.remove()
+          if (status === 401 || status === 403) {
+            bubble('error', 'ADMIN_TOKEN не совпал — проверь поле справа')
+            setConnected(false, 'токен неверный')
+            return
+          }
+          if (!data || data.ok !== true) {
+            bubble('error', (data && data.error) || 'неизвестная ошибка')
+            return
+          }
+          sentThisSession += 1
+          bubble('bot', data.reply, data.model + ' · ' + seconds)
+          el.usage.textContent = 'в этом браузере: ' + sentThisSession
+        } catch (error) {
+          pending.remove()
+          bubble('error', 'сеть: ' + error.message)
+        } finally {
+          busy = false
+          el.send.disabled = false
+          el.input.focus()
+        }
+      }
+
+      el.send.addEventListener('click', send)
+      el.input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          void send()
+        }
+      })
+      el.reset.addEventListener('click', async () => {
+        sessionId = newServiceSession()
+        el.log.innerHTML = ''
+        sentThisSession = 0
+        el.usage.textContent = ''
+        if (token()) {
+          await api('/api/chat', {
+            method: 'POST',
+            body: JSON.stringify({ sessionId, message: 'reset', reset: true }),
+          })
+        }
+        el.input.focus()
+      })
+      el.connect.addEventListener('click', () => void refreshStatus())
+      el.token.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') void refreshStatus()
+      })
+
+      // Restore a previously accepted token, then show live status.
+      const saved = localStorage.getItem(TOKEN_KEY)
+      if (saved) {
+        el.token.value = saved
+        void refreshStatus()
+        setInterval(() => void refreshStatus(), 30000)
+      }
+      el.input.focus()
+    </script>
+  </body>
+</html>
