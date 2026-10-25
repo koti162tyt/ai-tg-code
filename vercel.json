@@ -2,8 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/webhook.js": { "maxDuration": 60 },
-    "api/chat.js": { "maxDuration": 60 },
-    "api/status.js": { "maxDuration": 20 }
+    "api/chat.js": { "maxDuration": 90 },
+    "api/status.js": { "maxDuration": 20 },
+    "api/files.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/", "destination": "/public/index.html" }

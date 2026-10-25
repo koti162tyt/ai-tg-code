@@ -18,6 +18,7 @@ import { join } from 'node:path'
 import handler from './api/webhook.js'
 import chatHandler from './api/chat.js'
 import statusHandler from './api/status.js'
+import filesHandler from './api/files.js'
 
 /** Port to listen on; PORT wins so a tunnel tool can pick it. */
 const PORT = Number(process.env.PORT ?? 3000)
@@ -86,6 +87,7 @@ const ROUTES = [
   { match: (path) => path.startsWith('/api/webhook'), handler },
   { match: (path) => path === '/api/chat', handler: chatHandler },
   { match: (path) => path === '/api/status', handler: statusHandler },
+  { match: (path) => path === '/api/files', handler: filesHandler },
 ]
 
 /**

@@ -54,6 +54,14 @@
       .msg.bot { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
       .msg.error { align-self: flex-start; border: 1px solid var(--err); color: var(--err); background: transparent; }
       .msg .meta { display: block; font-size: 11px; color: var(--muted); margin-top: 6px; }
+      .actions { align-self: flex-start; max-width: 88%; display: grid; gap: 4px; }
+      .action {
+        display: flex; gap: 8px; align-items: baseline; font-size: 12.5px;
+        padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+      }
+      .action .tool { font-family: ui-monospace, monospace; color: var(--accent); }
+      .action.err { border-color: var(--err); }
+      .action .detail { color: var(--muted); word-break: break-all; }
       .composer { border-top: 1px solid var(--line); padding: 12px; display: grid; gap: 8px; }
       textarea {
         width: 100%; min-height: 76px; max-height: 240px; resize: vertical; padding: 10px 12px;
@@ -124,6 +132,13 @@
           <label class="hint" for="systemPrompt">Системный промпт для этого браузера</label>
           <textarea id="systemPrompt" style="min-height:64px" placeholder="оставь пустым — будет стандартный"></textarea>
         </div>
+
+        <h2>Файлы в репозитории</h2>
+        <div class="side-section">
+          <button id="listFiles">Показать файлы</button>
+          <span class="hint" id="filesHint">модель хранит файлы в папке chat-files</span>
+          <div id="fileList" style="display:grid;gap:4px"></div>
+        </div>
       </aside>
     </main>
 
@@ -146,6 +161,9 @@
         modelBadge: document.getElementById('modelBadge'),
         usage: document.getElementById('usage'),
         systemPrompt: document.getElementById('systemPrompt'),
+        listFiles: document.getElementById('listFiles'),
+        fileList: document.getElementById('fileList'),
+        filesHint: document.getElementById('filesHint'),
       }
 
       let sessionId = localStorage.getItem(SESSION_KEY) || newServiceSession()
@@ -180,6 +198,26 @@
         el.log.appendChild(node)
         el.log.scrollTop = el.log.scrollHeight
         return node
+      }
+
+      function renderActions(actions) {
+        const wrap = document.createElement('div')
+        wrap.className = 'actions'
+        for (const action of actions) {
+          const row = document.createElement('div')
+          row.className = 'action' + (action.ok ? '' : ' err')
+          const tool = document.createElement('span')
+          tool.className = 'tool'
+          tool.textContent = action.tool
+          const detail = document.createElement('span')
+          detail.className = 'detail'
+          detail.textContent = action.ok ? action.detail : 'ОШИБКА: ' + action.detail
+          row.appendChild(tool)
+          row.appendChild(detail)
+          wrap.appendChild(row)
+        }
+        el.log.appendChild(wrap)
+        el.log.scrollTop = el.log.scrollHeight
       }
 
       async function api(path, options) {
@@ -248,8 +286,7 @@
         }
       }
 
-      function kv(label, value, flag) {
-        const row = document.createElement('div')
+      function kv(label, value, flag) {        const row = document.createElement('div')
         row.className = 'kv'
         const a = document.createElement('span')
         a.textContent = label
@@ -303,7 +340,10 @@
           }
           sentThisSession += 1
           bubble('bot', data.reply, data.model + ' · ' + seconds)
+          if (Array.isArray(data.actions) && data.actions.length > 0) renderActions(data.actions)
           el.usage.textContent = 'в этом браузере: ' + sentThisSession
+          // File operations changed the repository; refresh the panel facts.
+          void refreshStatus()
         } catch (error) {
           pending.remove()
           bubble('error', 'сеть: ' + error.message)
@@ -334,6 +374,33 @@
         }
         el.input.focus()
       })
+      el.listFiles.addEventListener('click', async () => {
+        el.fileList.innerHTML = ''
+        el.filesHint.textContent = 'загружаю…'
+        const { status, data } = await api('/api/files', { method: 'GET' })
+        if (!data || data.ok !== true) {
+          el.filesHint.textContent = (data && data.error) || 'ошибка ' + status
+          return
+        }
+        el.filesHint.textContent = data.repo + ' · ' + data.branch + ' · ' + data.path
+        const files = (data.entries || []).filter((e) => e.type === 'file')
+        if (files.length === 0) {
+          el.filesHint.textContent += ' — папка пуста'
+          return
+        }
+        for (const file of files) {
+          const row = document.createElement('div')
+          row.className = 'kv'
+          const a = document.createElement('span')
+          a.textContent = file.name
+          const b = document.createElement('span')
+          b.textContent = Math.round(file.size / 1024 * 10) / 10 + ' КБ'
+          row.appendChild(a)
+          row.appendChild(b)
+          el.fileList.appendChild(row)
+        }
+      })
+
       el.connect.addEventListener('click', () => void refreshStatus())
       el.token.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') void refreshStatus()

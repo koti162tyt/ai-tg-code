@@ -8,12 +8,36 @@ Telegram-бот с ИИ на **Routeway** плюс веб-консоль, раз
 ```
 Telegram  ──POST──▶  /api/webhook/<secret>  ─┐
                                             ├──▶ lib/llm.js ──▶ Routeway
-Браузер   ──POST──▶  /api/chat              ─┘
+Браузер   ──POST──▶  /api/chat  ──▶ lib/tools.js ──▶ GitHub (файлы)
 Браузер   ──GET───▶  /api/status            ──▶ lib/stats.js + Telegram
+Браузер   ──GET───▶  /api/files             ──▶ GitHub напрямую
 ```
 
-Вебхук и консоль делят клиент модели, историю и словарь ошибок: исправленная
-ошибка чинится для обеих поверхностей сразу.
+Вебхук и консоль делят клиент модели, историю и словарь ошибок.
+
+## Модель работает с файлами в GitHub
+
+Браузерный чат умеет читать и писать файлы в репозитории. Модель **не трогает
+GitHub напрямую**: она просит вызвать инструмент, сервер выполняет его и отдаёт
+результат обратно.
+
+| Инструмент | Что делает |
+|---|---|
+| `repo_list` | список файлов в папке |
+| `repo_read` | прочитать текстовый файл |
+| `repo_write` | создать или заменить файл (коммит) |
+| `repo_delete` | удалить файл (коммит) |
+
+**Границы, которые держит сервер, а не модель:**
+
+- всё внутри `GITHUB_FOLDER` (по умолчанию `chat-files`);
+- только текстовые расширения (`md`, `txt`, `json`, `py`, `js`, `yaml`, `csv`, …);
+- пути с `..`, `.env` и скрытыми сегментами отклоняются;
+- файл не больше 512 КБ;
+- не больше 4 шагов инструментов за один ход.
+
+Поэтому модель **не может** переписать код самого бота (`api/`, `lib/`) или
+закоммитить бинарник.
 
 ## Что нужно получить
 
@@ -23,6 +47,12 @@ Telegram  ──POST──▶  /api/webhook/<secret>  ─┐
 | `TELEGRAM_WEBHOOK_SECRET` | придумать | путь вебхука |
 | `ADMIN_TOKEN` | придумать | пароль веб-консоли |
 | `ROUTEWAY_API_KEY` | [routeway.ai](https://routeway.ai) → Dashboard | без карты |
+| `GITHUB_TOKEN` | [fine-grained token](https://github.com/settings/personal-access-tokens/new) | **Contents: Read and write** на один репозиторий |
+| `GITHUB_OWNER` / `GITHUB_REPO` | репозиторий | `koti162tyt` / `ai-tg-code` |
+| `GITHUB_FOLDER` | придумать | по умолчанию `chat-files` |
+
+⚠️ Не берите classic-токен со scope `repo`: он даёт запись **во все** ваши
+репозитории. Нужен fine-grained на один.
 
 Сгенерировать секреты:
 
@@ -101,9 +131,12 @@ npm run set-webhook -- https://ваш-проект.vercel.app
 | Файл | Роль |
 |---|---|
 | `api/webhook.js` | Telegram webhook |
-| `api/chat.js` | один ход чата из браузера |
+| `api/chat.js` | один ход чата из браузера, с циклом инструментов |
 | `api/status.js` | данные админ-панели |
-| `lib/llm.js` | клиент Routeway |
+| `api/files.js` | прямой доступ к файлам: list/read/write/delete |
+| `lib/llm.js` | клиент Routeway (`chat` и `chatRaw` для инструментов) |
+| `lib/tools.js` | инструменты модели и их выполнение |
+| `lib/github.js` | GitHub Contents API + защита путей |
 | `lib/telegram.js` | Bot API, разбиение длинных ответов |
 | `lib/memory.js` | история разговоров в памяти инстанса |
 | `lib/http.js` | токен-проверка (constant-time), JSON-разбор |
