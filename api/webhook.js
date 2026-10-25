@@ -11,7 +11,7 @@
  * @module api/webhook
  */
 
-import { chat, appendExchange, DEFAULT_MODEL } from '../lib/modelscope.js'
+import { chat, appendExchange, DEFAULT_MODEL } from '../lib/llm.js'
 import { sendMessage, sendChatAction, CHAT_ACTION_TTL } from '../lib/telegram.js'
 import { getHistory, setHistory, clearHistory, historyCount } from '../lib/memory.js'
 
@@ -107,7 +107,7 @@ async function handleText({ chatId, text, message }) {
       text:
         `Привет, ${escapeName(message.from?.first_name)}!\n\n` +
         'Пиши вопрос — отвечу. Модель: ' +
-        `${process.env.MODELSCOPE_MODEL ?? DEFAULT_MODEL}.\n\n` +
+        `${process.env.LLM_MODEL ?? DEFAULT_MODEL}.\n\n` +
         'Команды: /reset — забыть разговор, /status — состояние бота.',
     })
     return { handled: 'start' }
@@ -123,7 +123,7 @@ async function handleText({ chatId, text, message }) {
       token,
       chatId,
       text:
-        `Модель: ${process.env.MODELSCOPE_MODEL ?? DEFAULT_MODEL}\n` +
+        `Модель: ${process.env.LLM_MODEL ?? DEFAULT_MODEL}\n` +
         `Сообщений в этом разговоре: ${history.length}\n` +
         `Чатов в памяти: ${historyCount()}`,
     })
@@ -140,9 +140,9 @@ async function handleText({ chatId, text, message }) {
   const history = getHistory(chatId)
   const systemPrompt = process.env.SYSTEM_PROMPT ?? DEFAULT_SYSTEM_PROMPT
   const reply = await chat({
-    apiKey: process.env.MODELSCOPE_API_KEY,
-    model: process.env.MODELSCOPE_MODEL,
-    baseUrl: process.env.MODELSCOPE_BASE_URL,
+    apiKey: process.env.ROUTEWAY_API_KEY,
+    model: process.env.LLM_MODEL,
+    baseUrl: process.env.LLM_BASE_URL,
     messages: [
       { role: 'system', content: systemPrompt },
       ...history,
@@ -190,8 +190,9 @@ function safeParse(text) {
 /** Short, user-safe description of a failure. */
 function describe(error) {
   const message = redact(error?.message ?? String(error))
-  if (/401|403/.test(message)) return 'ключ ModelScope неверный или истёк'
-  if (/429/.test(message)) return 'исчерпан лимит ModelScope, попробуй позже'
+  if (/401|403/.test(message)) return 'ключ Routeway неверный или истёк'
+  if (/429/.test(message)) return 'исчерпан бесплатный лимит (200 запросов в день), попробуй позже'
+  if (/402/.test(message)) return 'эта модель платная — выбери модель с суффиксом :free'
   if (/timeout|abort/i.test(message)) return 'модель не ответила вовремя'
   return message.slice(0, 300)
 }
