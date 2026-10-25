@@ -1,0 +1,15 @@
+{
+  "name": "ai-tg-code",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram bot backed by ModelScope, deployed as a Vercel serverless webhook",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node dev-server.js",
+    "set-webhook": "node scripts/set-webhook.js",
+    "delete-webhook": "node scripts/set-webhook.js --delete"
+  }
+}
